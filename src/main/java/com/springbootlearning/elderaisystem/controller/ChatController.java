@@ -1,7 +1,9 @@
 package com.springbootlearning.elderaisystem.controller;
 
 import com.springbootlearning.elderaisystem.service.AIService;
+import com.springbootlearning.elderaisystem.service.VoiceService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +20,10 @@ public class ChatController {
 
     @Autowired
     private AIService aiService;
+
+    @Autowired
+    @Qualifier("xunfeiVoiceService")
+    private VoiceService voiceService;
 
     @PostMapping("/send") // POST 请求接口，用于提交数据（对话内容）
     public Map<String, Object> sendMessage(@RequestParam Long uid, @RequestBody Map<String, String> body)
@@ -55,47 +61,83 @@ public class ChatController {
 
             // 4.获取AI的回复
             String aiReply = aiService.getAIResponse(ChatHistory);
+            String cleanReply = aiReply;
+            String detectedEmotion = null;
 
-            // 5.拦截提醒的关键词
-            if(aiReply.contains("[REMINDER_TASK]"))
+            // 5.1 提取[EMOTION]负面情绪
+            if(cleanReply.contains("[EMOTION]"))
             {
-                // 提取标签内容
-                String taskData = aiReply.substring(aiReply.indexOf("[REMINDER_TASK]") + 15, aiReply.indexOf("[/REMINDER_TASK]"));
-                String[] parts = taskData.split("\\|");
+                try {
+                    int startIndex = cleanReply.indexOf("[EMOTION]") + 9;
+                    int endIndex = cleanReply.indexOf("[/EMOTION]");
+                    if(startIndex < endIndex)
+                    {
+                        detectedEmotion = cleanReply.substring(startIndex, endIndex).trim();
+                        System.out.println("🚨 【系统告警】检测到老人负面情绪：" + detectedEmotion);
 
-                if(parts.length >= 3)
-                {
-                    String taskName = parts[0].trim();
-                    String fullDateTime = parts[1].trim();
-                    String frequencyStr = parts[2].trim();
-                    String timeOnly = fullDateTime.substring(11);
-
-                    int repeatTypeInt = 0; // 默认 0 代表 ONCE
-                    if ("DAILY".equals(frequencyStr)) {
-                        repeatTypeInt = 1;
-                    } else if ("WEEKLY".equals(frequencyStr)) {
-                        repeatTypeInt = 2;
+                        // 后续补充：将负面情绪信息传递到子女端
                     }
-
-                    // 存入数据库
-                    String SQL = "INSERT INTO reminders (user_id, task_name, remind_time, next_remind_time, repeat_type) VALUES (?, ?, ?, ?, ?)";
-                    jdbcTemplate.update(SQL, uid, taskName, timeOnly, fullDateTime, repeatTypeInt);
-//                    System.out.println(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
-                    System.out.println("✅ 成功存入数据库！下次执行时间：" + fullDateTime);
+                } catch (Exception e) {
+                    System.err.println("❌ 解析情绪标签失败");
                 }
-
-                // 将标签从回复中删掉
-                aiReply = aiReply.replaceAll("\\[REMINDER_TASK\\].*?\\[/REMINDER_TASK\\]", "").trim();
+                // 把提取完的标签从文本中彻底抹除
+                cleanReply = cleanReply.replaceAll("\\[EMOTION\\].*?\\[/EMOTION\\]", "");
             }
 
-            // 6.将AI的回复存入数据库中
-            String insertAiSQL = "INSERT INTO chat_history(session_id, user_id, content, role) VALUES (?, ?, ?, ?)";
-            jdbcTemplate.update(insertAiSQL, session_id, uid, aiReply, "assistant");
+            // 5.2 拦截提醒的标签
+            if(cleanReply.contains("[REMINDER_TASK]"))
+            {
+                try {
+                    int startIndex = cleanReply.indexOf("[REMINDER_TASK]") + 15;
+                    int endIndex = cleanReply.indexOf("[/REMINDER_TASK]");
+                    if (startIndex < endIndex) {
+                        String taskData = cleanReply.substring(startIndex, endIndex);
+                        String[] parts = taskData.split("\\|");
 
-            // 7.返回结果
+                        if (parts.length >= 3) {
+                            String taskName = parts[0].trim();
+                            String fullDateTime = parts[1].trim();
+                            String frequencyStr = parts[2].trim();
+                            String timeOnly = fullDateTime.substring(11);
+
+                            int repeatTypeInt = 0; // 默认 0 代表 ONCE
+                            if ("DAILY".equals(frequencyStr)) {
+                                repeatTypeInt = 1;
+                            } else if ("WEEKLY".equals(frequencyStr)) {
+                                repeatTypeInt = 2;
+                            }
+                            // 存入数据库
+                            String SQL = "INSERT INTO reminders (user_id, task_name, remind_time, next_remind_time, repeat_type) VALUES (?, ?, ?, ?, ?)";
+                            jdbcTemplate.update(SQL, uid, taskName, timeOnly, fullDateTime, repeatTypeInt);
+                            System.out.println("✅ 成功创建提醒任务：" + taskName);
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("❌ 解析提醒标签失败");
+                }
+                cleanReply = cleanReply.replaceAll("\\[REMINDER_TASK\\].*?\\[/REMINDER_TASK\\]", "");
+            }
+
+            cleanReply = cleanReply.trim();
+
+            if (detectedEmotion != null) {
+                String updateElderUserSQL = "UPDATE chat_history SET emotion = ? WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1";
+                jdbcTemplate.update(updateElderUserSQL, detectedEmotion, session_id);
+            }
+
+            // 6. 将 AI 的回复存入数据库中
+            String insertAiSQL = "INSERT INTO chat_history(session_id, user_id, content, role, emotion) VALUES (?, ?, ?, ?, ?)";
+            jdbcTemplate.update(insertAiSQL, session_id, uid, cleanReply, "assistant", null);
+
+            // 7.语音合成
+            String audioBase64 = voiceService.textToSpeech(cleanReply);
+
+            // 8.返回结果
             response.put("status", "success");
-            response.put("response", aiReply);
+            response.put("response", cleanReply);
             response.put("session_id", session_id);
+            response.put("emotion", detectedEmotion);
+            response.put("audioBase64", audioBase64);
         } catch (Exception e) {
             e.printStackTrace();
             response.put("status", "error");

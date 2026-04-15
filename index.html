@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>豆小包 - 智慧老人陪护系统</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #43a047;
+            --primary-light: #e8f5e9;
+            --bg-color: #f4f7f6;
+            --ai-bubble: #ffffff;
+            --user-bubble: #95ec69;
+            --text-color: #333;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background-color: var(--bg-color); height: 100vh; display: flex; justify-content: center; align-items: center; }
+
+        /* 整体布局容器 */
+        .app-wrapper {
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            background: #fff;
+            display: flex;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        /* 侧边栏：用于展示老人状态 */
+        .sidebar {
+            width: 260px;
+            background: #f8faf9;
+            border-right: 1px solid #eee;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .profile-section { text-align: center; margin-bottom: 30px; }
+        .avatar { width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 10px; border: 3px solid var(--primary-color); display: flex; align-items: center; justify-content: center; font-size: 40px; color: #fff; background: var(--primary-color); }
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; background: #e0e0e0; color: #666; }
+        .status-online { background: #e8f5e9; color: #2e7d32; }
+
+        /* 主聊天区 */
+        .main-chat { flex: 1; display: flex; flex-direction: column; position: relative; }
+        .chat-header { padding: 20px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; }
+        .chat-header h2 { font-size: 1.1rem; color: var(--text-color); }
+
+        .chat-box { flex: 1; padding: 25px; overflow-y: auto; background-color: #f9f9f9; scroll-behavior: smooth; }
+
+        /* 气泡样式升级 */
+        .message { margin-bottom: 20px; display: flex; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .message.ai { justify-content: flex-start; }
+        .message.user { justify-content: flex-end; }
+        .bubble { max-width: 80%; padding: 12px 18px; border-radius: 15px; font-size: 17px; line-height: 1.6; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .ai .bubble { background: var(--ai-bubble); color: var(--text-color); border-bottom-left-radius: 2px; }
+        .user .bubble { background: var(--user-bubble); color: #000; border-bottom-right-radius: 2px; }
+
+        /* 输入区样式恢复 */
+        .input-area { padding: 20px; background: #fff; border-top: 1px solid #eee; display: flex; align-items: center; }
+        .input-wrapper { flex: 1; background: #f0f2f5; border-radius: 30px; padding: 5px 15px; display: flex; align-items: center; }
+        .input-wrapper input { flex: 1; border: none; background: transparent; padding: 12px; outline: none; font-size: 16px; }
+        .input-wrapper input:disabled { background: transparent; color: #888; }
+        
+        .voice-btn { background:none; border:none; color:var(--primary-color); font-size: 22px; cursor: pointer; margin-left: 10px; transition: 0.3s; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; }
+        .voice-btn.recording { color: #e53935; transform: scale(1.1); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+
+        .send-btn { width: 45px; height: 45px; border-radius: 50%; border: none; background: var(--primary-color); color: white; margin-left: 10px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; justify-content: center; }
+        .send-btn:hover { transform: scale(1.05); background: #388e3c; }
+        .send-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        @media (max-width: 600px) {
+            .sidebar { display: none; }
+            .app-wrapper { height: 100vh; border-radius: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-wrapper">
+    <aside class="sidebar">
+        <div class="profile-section">
+            <div class="avatar"><i class="fas fa-user"></i></div>
+            <h3>张爷爷</h3>
+            <span class="status-badge status-online">● 豆小包守护中</span>
+        </div>
+        <div style="margin-top: 20px;">
+            <p style="font-size: 14px; color: #888; margin-bottom: 10px;"><i class="fas fa-heartbeat"></i> 今日情感追踪</p>
+            <div id="emotionDisplay" style="font-weight: bold; color: var(--primary-color);">平静</div>
+        </div>
+        <div style="margin-top: auto;">
+            <p style="font-size: 12px; color: #bbb;">系统版本 v1.0.2</p>
+        </div>
+    </aside>
+
+    <main class="main-chat">
+        <header class="chat-header">
+            <h2>与 <b>豆小包</b> 对话中</h2>
+            <i class="fas fa-ellipsis-h" style="color: #ccc; cursor: pointer;"></i>
+        </header>
+        
+        <div class="chat-box" id="chatBox">
+            <div class="message ai">
+                <div class="bubble">爷爷/奶奶您好，我是您的智能助手豆小包。今天心情怎么样？有什么我可以帮您的吗？</div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-wrapper">
+                <input type="text" id="userInput" placeholder="点击这里打字，或点击右侧麦克风说话..." onkeypress="handleEnter(event)">
+                <button id="voiceBtn" class="voice-btn" onclick="toggleRecording(event)" title="点击开始/结束录音">
+                    <i class="fas fa-microphone" id="voiceIcon"></i>
+                </button>
+            </div>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </main>
+</div>
+
+<script>
+    // ==========================================
+    // 核心文本收发逻辑
+    // ==========================================
+
+    let currentSessionId = ""; 
+    const USER_ID = 1; 
+
+    function handleEnter(event) {
+        if (event.key === 'Enter') sendMessage();
+    }
+
+    function sendMessage() {
+        const inputDom = document.getElementById('userInput');
+        const text = inputDom.value.trim();
+        const sendBtn = document.getElementById('sendBtn');
+        if (!text) return;
+
+        appendMessage('user', text);
+        inputDom.value = '';
+        sendBtn.disabled = true;
+
+        const payload = { content: text };
+        if (currentSessionId) payload.sessionId = currentSessionId;
+
+        fetch(`http://localhost:8080/api/chat/send?uid=${USER_ID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                currentSessionId = data.session_id;
+                appendMessage('ai', data.response);
+                
+                if(data.emotion) {
+                    const emotionDom = document.getElementById('emotionDisplay');
+                    emotionDom.innerText = data.emotion;
+                    if (data.emotion === '开心') emotionDom.style.color = '#FF9800'; 
+                    else if (data.emotion === '孤独' || data.emotion === '失落') emotionDom.style.color = '#9E9E9E'; 
+                    else if (data.emotion === '身体不适') emotionDom.style.color = '#F44336'; 
+                    else if (data.emotion === '焦躁' || data.emotion === '悲伤') emotionDom.style.color = '#9C27B0'; 
+                    else emotionDom.style.color = '#4CAF50'; 
+                }
+
+                if (data.audioBase64) {
+                    const audio = new Audio("data:audio/mp3;base64," + data.audioBase64);
+                    audio.play();
+                }
+            } else {
+                appendMessage('ai', '❌ 系统忙，请稍后再试。');
+            }
+        })
+        .catch(err => {
+            appendMessage('ai', '🛑 网络异常，请确认服务器已启动（Port 8080）。');
+        })
+        .finally(() => {
+            sendBtn.disabled = false;
+        });
+    }
+
+    function checkReminders() {
+        fetch(`http://localhost:8080/api/reminders/check?uid=${USER_ID}`)
+            .then(res => res.json())
+            .then(tasks => {
+                if (tasks && tasks.length > 0) {
+                    tasks.forEach(task => {
+                        if(confirm(`🔔 豆小包提醒：\n\n该去执行任务啦：【${task.task_name}】\n\n点击确定表示已完成。`)) {
+                            fetch(`http://localhost:8080/api/reminders/complete?reid=${task.reid}`, { method: 'POST' })
+                                .then(res => res.text())
+                                .then(result => {
+                                    if(result === 'success') console.log(`任务 ${task.reid} 已确认。`);
+                                });
+                        }
+                    });
+                }
+            })
+            .catch(error => console.error("轮询异常:", error));
+    }
+
+    function appendMessage(role, text) {
+        const chatBox = document.getElementById('chatBox');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${role}`;
+        msgDiv.innerHTML = `<div class="bubble">${text}</div>`;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    setInterval(checkReminders, 10000);
+    document.addEventListener('DOMContentLoaded', checkReminders);
+
+    // ==========================================
+    // 🎤 点按式录音引擎 (Web Audio API)
+    // ==========================================
+
+    let audioContext;
+    let mediaStreamSource;
+    let scriptProcessor;
+    let audioData = []; 
+    let isRecording = false;
+
+    function toggleRecording(event) {
+        if(event) event.preventDefault();
+
+        const inputDom = document.getElementById('userInput');
+        const voiceBtn = document.getElementById('voiceBtn');
+        const voiceIcon = document.getElementById('voiceIcon');
+
+        // ====== 状态 1：当前未录音，点击准备开始 ======
+        if (!isRecording) {
+            isRecording = true;
+            audioData = []; 
+
+            // UI 切换到录音状态
+            voiceBtn.classList.add('recording');
+            voiceIcon.className = 'fas fa-stop-circle'; // 换成正方形停止图标
+            inputDom.placeholder = "🎙️ 正在倾听... 说完请再点一次麦克风停止";
+            inputDom.disabled = true; // 录音时禁用文字输入
+
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                mediaStreamSource = audioContext.createMediaStreamSource(stream);
+                scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                mediaStreamSource.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+
+                scriptProcessor.onaudioprocess = function(e) {
+                    if (!isRecording) return;
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    for (let i = 0; i < inputData.length; i++) {
+                        let s = Math.max(-1, Math.min(1, inputData[i]));
+                        audioData.push(s < 0 ? s * 0x8000 : s * 0x7FFF);
+                    }
+                };
+            }).catch(err => {
+                console.error("麦克风权限被拒绝", err);
+                inputDom.placeholder = "❌ 麦克风权限被拒绝，请检查浏览器设置";
+                resetVoiceUI();
+            });
+
+        // ====== 状态 2：当前正在录音，点击结束并发送 ======
+        } else {
+            isRecording = false;
+            
+            // UI 切换到识别状态
+            inputDom.placeholder = "⏳ 正在翻译您的语音...";
+            resetVoiceUI();
+
+            if (scriptProcessor) {
+                scriptProcessor.disconnect();
+                mediaStreamSource.disconnect();
+            }
+
+            if (audioData.length === 0) {
+                inputDom.placeholder = "点击这里打字，或点击右侧麦克风说话...";
+                return;
+            }
+
+            // 打包 PCM 数据发给后端
+            const buffer = new Int16Array(audioData);
+            const blob = new Blob([buffer], { type: 'application/octet-stream' });
+            const formData = new FormData();
+            formData.append("audio", blob, "record.pcm");
+
+            fetch('http://localhost:8080/api/chat/recognize', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success' && data.text) {
+                    // 填入输入框并自动触发发送！
+                    inputDom.value = data.text;
+                    sendMessage(); 
+                    inputDom.placeholder = "点击这里打字，或点击右侧麦克风说话...";
+                } else {
+                    inputDom.placeholder = "抱歉，没听清，能再说一遍吗？";
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                inputDom.placeholder = "网络似乎断开了...";
+            });
+        }
+    }
+
+    function resetVoiceUI() {
+        isRecording = false;
+        const voiceBtn = document.getElementById('voiceBtn');
+        const voiceIcon = document.getElementById('voiceIcon');
+        const inputDom = document.getElementById('userInput');
+        
+        voiceBtn.classList.remove('recording');
+        voiceIcon.className = 'fas fa-microphone';
+        inputDom.disabled = false; // 恢复文字输入
+    }
+</script>
+
+</body>
+</html>
