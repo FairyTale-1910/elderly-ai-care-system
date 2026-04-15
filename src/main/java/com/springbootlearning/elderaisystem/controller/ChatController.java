@@ -35,8 +35,8 @@ public class ChatController {
         try {
             String userContent = body.get("content");
 
-            // 1. 获取或生成 sessionId
-            // 核心逻辑：如果前端传了 sessionId 就用旧的（继续对话），没传就生成新的（新开对话）
+            // 1. 获取或生成 session_id
+            // 核心逻辑：如果前端传了 session_id 就用旧的（继续对话），没传就生成新的（新开对话）
             String session_id = body.get("sessionId");
             if (session_id == null || session_id.trim().isEmpty()) {
                 session_id = UUID.randomUUID().toString().substring(0, 8);

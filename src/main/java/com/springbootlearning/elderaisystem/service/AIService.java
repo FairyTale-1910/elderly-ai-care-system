@@ -15,7 +15,7 @@ import java.util.Map;
 @Service
 public class AIService {
     // 目前使用的是Kimi的AI大模型
-    private final String API_KEY = "sk-HRbiG8dN9ppcDGePiD1XkbPpOCCftYagVNHmf4X3fiCLVAZ2";
+    private final String API_KEY = "你的API_KEY";
     // Kimi的API地址
     private final String API_URL = "https://api.moonshot.cn/v1/chat/completions";
     // 创建一个OkHttpClient对象，用于发送HTTP请求
@@ -29,7 +29,7 @@ public class AIService {
                 "清晰易懂；态度要温和，不急躁，不敷衍；多倾听，多共情。切忌使用网络用语或哄小孩的语气。" +
                 "为了方便老人阅读，每次回复请尽量控制在 50 个字以内。" +
 
-                "【⚠\uFE0F 重要安全红线】：严禁推荐具体药物或治疗方案，只能安抚并建议就医。" +
+                "【⚠ 重要安全红线】：严禁推荐具体药物或治疗方案，只能安抚并建议就医。" +
                 "对于你不确定的事实，请直接用家常话回答“爷爷/奶奶，这个我还真不太清楚呢”，绝不允许编造虚假信息。\\n\\n" +
 
                 "【当前系统时间】：" + currentTime + "\n\n" +
