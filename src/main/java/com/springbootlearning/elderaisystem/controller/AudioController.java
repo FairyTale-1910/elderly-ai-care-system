@@ -18,14 +18,14 @@ public class AudioController {
     private XunfeiAsrServiceImpl xunfeiAsrService;
 
     @PostMapping("/recognize")
-    public ResponseEntity<Map<String, Object>> recognizeAudio(@RequestParam("audio") MultipartFile file) {
+    public ResponseEntity<Map<String, Object>> recognizeAudio(@RequestParam("audio") MultipartFile file, @RequestParam("uid") Long uid) {
         Map<String, Object> response = new HashMap<>();
 
         try {
             // 提取出音频字节流
             byte[] audioData = file.getBytes();
             System.out.println("🎤 收到前端录音文件，大小：" + audioData.length + " 字节，准备开始识别...");
-            String recognizedText = xunfeiAsrService.audioToText(audioData);
+            String recognizedText = xunfeiAsrService.audioToText(audioData, uid);
 
             response.put("status", "success");
             response.put("text", recognizedText);

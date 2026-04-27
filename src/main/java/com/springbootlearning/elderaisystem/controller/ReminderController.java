@@ -3,6 +3,8 @@ package com.springbootlearning.elderaisystem.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 import java.util.Map;
@@ -48,5 +50,19 @@ public class ReminderController {
             jdbcTemplate.update("UPDATE reminders SET next_remind_time = DATE_ADD(next_remind_time, INTERVAL 1 WEEK) WHERE reid = ?", reid);
         }
         return "success";
+    }
+
+    // 取消提醒事项
+    @PostMapping("/delete")
+    public String deleteReminder(@RequestParam Long reid) {
+        try {
+            // 直接从数据库彻底删除该条记录
+            String sql = "DELETE FROM reminders WHERE reid = ?";
+            jdbcTemplate.update(sql, reid);
+            return "success";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "error";
+        }
     }
 }

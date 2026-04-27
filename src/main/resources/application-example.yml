@@ -1,0 +1,41 @@
+# ==========================================
+# 1. 基础系统与服务器配置
+# ==========================================
+spring:
+  application:
+    name: ElderAISystem
+  # 数据库连接配置
+  datasource:
+    url: jdbc:mysql://localhost:3306/ElderAISystem?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+server:
+  port: 8080
+
+# ==========================================
+# 2. 日志配置
+# ==========================================
+logging:
+  level:
+    # 打印 SQL 语句，方便开发时排查数据库问题
+    org.springframework.jdbc.core.JdbcTemplate: DEBUG
+
+# ==========================================
+# 3. 第三方 AI 接口密钥配置 (通过 @Value 注入)
+# ==========================================
+# 科大讯飞 ASR 语音识别配置
+xunfei:
+  asr:
+    app-id: "你的appid"
+    api-key: "你的讯飞apikey"
+    api-secret: "你的讯飞apisecret"
+    host-url: "https://iat-api.xfyun.cn/v2/iat"
+  tts:
+    host-url: https://tts-api.xfyun.cn/v2/tts
+
+# Kimi (Moonshot) 大模型配置
+moonshot:
+  api-key: "你的大模型api-key"
+  api-url: "https://api.moonshot.cn/v1/chat/completions"

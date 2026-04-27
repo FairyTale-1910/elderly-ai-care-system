@@ -3,6 +3,9 @@ package com.springbootlearning.elderaisystem.service.impl;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import okhttp3.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
@@ -21,12 +24,22 @@ import static java.lang.Math.min;
 
 @Service("xunfeiAsrService")
 public class XunfeiAsrServiceImpl {
-    private static final String APPID = "你的APPID";
-    private static final String API_KEY = "你的API_KEY";
-    private static final String API_SECRET = "你的API_SECRET";
-    private static final String HOST_URL = "https://iat-api.xfyun.cn/v2/iat";
+    @Value("${xunfei.asr.app-id}")
+    private String APPID;
 
-    public String audioToText(byte[] audioData) {
+    @Value("${xunfei.asr.api-key}")
+    private String API_KEY;
+
+    @Value("${xunfei.asr.api-secret}")
+    private String API_SECRET;
+
+    @Value("${xunfei.asr.host-url}")
+    private String HOST_URL;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    public String audioToText(byte[] audioData, Long uid) {
         StringBuilder resultBuilder = new StringBuilder();
         try {
             String authUrl = getAuthUrl(HOST_URL, API_KEY, API_SECRET);
@@ -36,11 +49,39 @@ public class XunfeiAsrServiceImpl {
             Request request = new Request.Builder().url(wsUrl).build();
             CountDownLatch latch = new CountDownLatch(1);
 
+            // 识别用户所用的语言
+            String dialectStr = "";
+            try {
+                String sql = "SELECT dialect FROM user_profiles WHERE uid = ?";
+                dialectStr = jdbcTemplate.queryForObject(sql, String.class, uid);
+                if(dialectStr == null) dialectStr = "普通话";
+            } catch (Exception e) {
+                System.out.println("未找到用户方言设置，默认使用普通话");
+                dialectStr = "普通话";
+            }
+
+            String language = "zh_cn"; // 默认大语种是中文
+            String accent = "mandarin"; // 默认口音是普通话
+
+            // 根据讯飞所激活的语种添加相应的参数
+            if (dialectStr.contains("粤") || dialectStr.contains("广东")) {
+                accent = "cn_cantonese";
+            } else if (dialectStr.contains("上海") || dialectStr.contains("沪")) {
+                accent = "shanghainese";
+            } else if (dialectStr.contains("河南")) {
+                accent = "henanese";
+            } else if (dialectStr.contains("英语") || dialectStr.toLowerCase().contains("english")) {
+                language = "en_us"; // 如果选了英语，大语种也要换
+                accent = "mandarin";
+            }
+            final String finalLang = language;
+            final String finalAccent = accent;
+
             client.newWebSocket(request, new WebSocketListener() {
                 @Override
                 public void onOpen(WebSocket webSocket, Response response) {
                     System.out.println("✅ ASR WebSocket 连接成功！准备发送音频...");
-                    new Thread(() -> sendAudioFrames(webSocket, audioData)).start();
+                    new Thread(() -> sendAudioFrames(webSocket, audioData, finalLang, finalAccent)).start();
                 }
 
                 @Override
@@ -119,7 +160,7 @@ public class XunfeiAsrServiceImpl {
         return String.format("%s?authorization=%s&date=%s&host=%s", hostUrl, authBase, date.replace(" ", "%20"), url.getHost());
     }
 
-    private void sendAudioFrames(WebSocket webSocket, byte[] audioData) {
+    private void sendAudioFrames(WebSocket webSocket, byte[] audioData, String language, String accent) {
         int frameSize = 1280; // 每刀切 1280 字节（代表 40 毫秒）
         int len = audioData.length;
         int index = 0;
@@ -144,9 +185,10 @@ public class XunfeiAsrServiceImpl {
                     requestJson.add("common", common);
 
                     JsonObject business = new JsonObject();
-                    business.addProperty("language", "zh_cn"); // 中文
+                    String voiceType = "";
+                    business.addProperty("language", language); // 根据用户语言传入
                     business.addProperty("domain", "iat");     // 日常交流
-                    business.addProperty("accent", "mandarin");// 普通话
+                    business.addProperty("accent", accent);// 普通话
                     business.addProperty("eos", 2000); // 停顿 2000 毫秒算说完
                     requestJson.add("business", business);
                 }

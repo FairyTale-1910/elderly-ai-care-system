@@ -37,14 +37,16 @@ public class ChatController {
 
             // 1. 获取或生成 session_id
             // 核心逻辑：如果前端传了 session_id 就用旧的（继续对话），没传就生成新的（新开对话）
+            boolean isNewSession = false;
             String session_id = body.get("sessionId");
             if (session_id == null || session_id.trim().isEmpty()) {
                 session_id = UUID.randomUUID().toString().substring(0, 8);
+                isNewSession = true;
             }
 
             // 2.将老人的话存入数据库中
-            String insertSQL = "INSERT INTO chat_history(session_id, user_id, content, role) VALUES (?, ?, ?, ?)";
-            jdbcTemplate.update(insertSQL, session_id, uid, userContent, "user");
+            String insertSQL = "INSERT INTO chat_history(session_id, user_id, content, role, emotion) VALUES (?, ?, ?, ?, ?)";
+            jdbcTemplate.update(insertSQL, session_id, uid, userContent, "user", null);
 
             // 3.记忆提取
             String QuerySQL = "SELECT role, content FROM (" +
@@ -60,22 +62,77 @@ public class ChatController {
             }
 
             // 4.获取AI的回复
-            String aiReply = aiService.getAIResponse(ChatHistory);
+            String aiReply = aiService.getAIResponse(ChatHistory, uid);
             String cleanReply = aiReply;
-            String detectedEmotion = null;
+
+            if(isNewSession)
+            {
+                // 如果是新对话，则记录标题，并且更新对话时间
+                String title = userContent.length() > 15 ? userContent.substring(0, 15) + "..." : userContent;
+                String sqlSession = "INSERT INTO chat_sessions (session_id, user_id, title) VALUES (?, ?, ?)";
+                jdbcTemplate.update(sqlSession, session_id, uid, title);
+            }
+            else
+            {
+                // 如果是旧对话，则更新对话时间
+                String updateSQL = "UPDATE chat_sessions SET updated_at = CURRENT_TIMESTAMP WHERE session_id = ?";
+                jdbcTemplate.update(updateSQL, session_id);
+            }
 
             // 5.1 提取[EMOTION]负面情绪
+            String displayEmotion = "平静";
             if(cleanReply.contains("[EMOTION]"))
             {
                 try {
                     int startIndex = cleanReply.indexOf("[EMOTION]") + 9;
                     int endIndex = cleanReply.indexOf("[/EMOTION]");
+
                     if(startIndex < endIndex)
                     {
-                        detectedEmotion = cleanReply.substring(startIndex, endIndex).trim();
-                        System.out.println("🚨 【系统告警】检测到老人负面情绪：" + detectedEmotion);
+                        String emotionTag = cleanReply.substring(startIndex, endIndex).trim();
+                        String emotionCategory = "平静";
+                        String emotionSeverity = "轻微";
 
-                        // 后续补充：将负面情绪信息传递到子女端
+                        if(emotionTag.contains("|"))
+                        {
+                            String[] parts = emotionTag.split("\\|");
+                            emotionCategory = parts[0];
+                            emotionSeverity = parts[1];
+                            System.out.println("提取的的情绪类型：" + emotionCategory + " 情绪程度: " + emotionSeverity);
+                        }
+                        else
+                        {
+                            emotionCategory = emotionTag;
+                        }
+
+                        if(!emotionCategory.equals("无情绪"))
+                        {
+                            int moodScore = 0;
+                            switch (emotionCategory)
+                            {
+                                case "开心": moodScore = 5; break;
+                                case "平静": moodScore = 0; break;
+                                case "身体不适": moodScore = -5; break;
+                                case "焦躁": moodScore = -4; break;
+                                case "孤独": moodScore = -3; break;
+                                case "失落": moodScore = -3; break;
+                                case "无助": moodScore = -3; break;
+                                case "思念": moodScore = -2; break;
+                                default: moodScore = 0; break;
+                            }
+
+                            String SQL = "INSERT INTO emotion_logs (user_id, emotion_category, severity," +
+                                    " mood_score, source_message) VALUES (?, ?, ?, ?, ?)";
+                            jdbcTemplate.update(SQL, uid, emotionCategory, emotionSeverity, moodScore, userContent);
+
+                            if ("严重".equals(emotionSeverity)) {
+                                System.out.println("🚨🚨🚨 【触发高危预警】");
+                                System.out.println("老人ID：" + uid);
+                                System.out.println("触发原因：" + emotionCategory + " (原话: " + userContent + ")");
+                                // 后续补充：调用 WebSocket、短信 或 极光推送 API 通知子女端APP
+                            }
+                        }
+                        displayEmotion = "无情绪".equals(emotionCategory) ? "平静" : emotionCategory;
                     }
                 } catch (Exception e) {
                     System.err.println("❌ 解析情绪标签失败");
@@ -120,10 +177,6 @@ public class ChatController {
 
             cleanReply = cleanReply.trim();
 
-            if (detectedEmotion != null) {
-                String updateElderUserSQL = "UPDATE chat_history SET emotion = ? WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1";
-                jdbcTemplate.update(updateElderUserSQL, detectedEmotion, session_id);
-            }
 
             // 6. 将 AI 的回复存入数据库中
             String insertAiSQL = "INSERT INTO chat_history(session_id, user_id, content, role, emotion) VALUES (?, ?, ?, ?, ?)";
@@ -136,7 +189,7 @@ public class ChatController {
             response.put("status", "success");
             response.put("response", cleanReply);
             response.put("session_id", session_id);
-            response.put("emotion", detectedEmotion);
+            response.put("emotion", displayEmotion);
             response.put("audioBase64", audioBase64);
         } catch (Exception e) {
             e.printStackTrace();

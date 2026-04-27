@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.springbootlearning.elderaisystem.service.VoiceService;
 import okhttp3.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
@@ -21,10 +22,17 @@ import java.util.concurrent.TimeUnit;
 
 @Service("xunfeiVoiceService")
 public class XunfeiVoiceServiceImpl implements VoiceService {
-    private static final String APPID = "你的APPID";
-    private static final String API_KEY = "你的API_KEY";
-    private static final String API_SECRET = "你的API_SECRET";
-    private static final String HOST_URL = "https://cbm01.cn-huabei-1.xf-yun.com/v1/private/mcd9m97e6\n";
+    @Value("${xunfei.asr.app-id}")
+    private String APPID;
+
+    @Value("${xunfei.asr.api-key}")
+    private String API_KEY;
+
+    @Value("${xunfei.asr.api-secret}")
+    private String API_SECRET;
+
+    @Value("${xunfei.tts.host-url}")
+    private String HOST_URL;
 
     @Override
     public String textToSpeech(String text) {
@@ -52,6 +60,7 @@ public class XunfeiVoiceServiceImpl implements VoiceService {
 
                 @Override
                 public void onMessage(WebSocket webSocket, String text) {
+                    System.out.println("\n\n====== 讯飞原始报文 ======\n" + text + "\n==========================\n\n");
                     try {
                         Gson gson = new Gson();
                         JsonObject responseObj = gson.fromJson(text, JsonObject.class);
